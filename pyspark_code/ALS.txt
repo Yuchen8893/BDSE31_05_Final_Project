@@ -1,0 +1,43 @@
+import pyspark
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType,StructField, StringType, IntegerType 
+from pyspark.sql.types import ArrayType, DoubleType, BooleanType
+from pyspark.sql.functions import col,array_contains
+from pyspark.sql import SQLContext 
+from pyspark.ml.recommendation import ALS
+from pyspark.sql.functions import udf,col,when
+from pyspark.sql.functions import to_timestamp,date_format
+import numpy as np
+import pandas as pd
+from pyspark.sql.types import *
+from pyspark.sql.functions import *
+from pyspark.sql.window import *
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import StringIndexer
+from pyspark.ml import Pipeline
+import warnings
+warnings.filterwarnings("ignore")
+
+
+
+# load file
+sc = SparkSession.builder.appName("Recommendations").config("spark.sql.files.maxPartitionBytes", 5000000).getOrCreate()
+spark = SparkSession(sc)
+transaction = spark.read.option("header",True).csv("transactions_train.csv")
+transaction.printSchema()
+
+# Prepare the dataset (limit先限制大小)
+transaction=transaction.groupby('customer_id', 'article_id').count().limit(1000)
+transaction.printSchema()
+print((transaction.count(), len(transaction.columns)))
+
+
+#analysis customer shopping times
+userId_count = transaction.groupBy("customer_id").count().orderBy('count', ascending=False)
+userId_count.show()
+
+
+indexer = [StringIndexer(inputCol=column, outputCol=column+"_index") for column in list(set(transaction.columns)-set(['count'])) ]
+pipeline = Pipeline(stages=indexer)
+transformed = pipeline.fit(transaction).transform(transaction)
+transformed.show()
